@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { Flexbox } from 'react-layout-kit';
 
 import { useAgentStore } from '@/store/agent';
-import { agentSelectors } from '@/store/agent/selectors';
+import { agentChatConfigSelectors } from '@/store/agent/selectors';
 import { useChatStore } from '@/store/chat';
 import { chatSelectors } from '@/store/chat/selectors';
 import { useUserStore } from '@/store/user';
@@ -65,15 +65,12 @@ const Item = memo<ChatListItemProps>(
     disableEditing,
     inPortalThread = false,
   }) => {
-    const fontSize = useUserStore(userGeneralSettingsSelectors.fontSize);
     const { t } = useTranslation('common');
     const { styles, cx } = useStyles();
-    const [type = 'chat'] = useAgentStore((s) => {
-      const config = agentSelectors.currentAgentChatConfig(s);
-      return [config.displayMode];
-    });
 
+    const type = useAgentStore(agentChatConfigSelectors.displayMode);
     const item = useChatStore(chatSelectors.getMessageById(id), isEqual);
+    const fontSize = useUserStore(userGeneralSettingsSelectors.fontSize);
 
     const [
       isMessageLoading,
@@ -175,6 +172,7 @@ const Item = memo<ChatListItemProps>(
         citations: item?.role === 'user' ? undefined : item?.search?.citations,
         components,
         customRender: markdownCustomRender,
+        enableCustomFootnotes: item?.role === 'assistant',
         rehypePlugins: item?.role === 'user' ? undefined : rehypePlugins,
         remarkPlugins: item?.role === 'user' ? undefined : remarkPlugins,
         showCitations:
