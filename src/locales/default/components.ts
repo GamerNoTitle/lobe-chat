@@ -78,6 +78,7 @@ export default {
       custom: '自定义模型，默认设定同时支持函数调用与视觉识别，请根据实际情况验证上述能力的可用性',
       file: '该模型支持上传文件读取与识别',
       functionCall: '该模型支持函数调用（Function Call）',
+      imageOutput: '该模型支持生成图片',
       reasoning: '该模型支持深度思考',
       search: '该模型支持联网搜索',
       tokens: '该模型单个会话最多支持 {{tokens}} Tokens',
@@ -92,6 +93,10 @@ export default {
     provider: '服务商',
   },
   OllamaSetupGuide: {
+    action: {
+      close: '关闭提示',
+      start: '已安装并运行，开始对话',
+    },
     cors: {
       description: '因浏览器安全限制，你需要为 Ollama 进行跨域配置后方可正常使用。',
       linux: {

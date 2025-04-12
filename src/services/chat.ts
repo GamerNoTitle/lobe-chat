@@ -8,7 +8,7 @@ import { INBOX_GUIDE_SYSTEMROLE } from '@/const/guide';
 import { INBOX_SESSION_ID } from '@/const/session';
 import { DEFAULT_AGENT_CONFIG } from '@/const/settings';
 import { TracePayload, TraceTagMap } from '@/const/trace';
-import { isDeprecatedEdition, isServerMode } from '@/const/version';
+import { isDeprecatedEdition, isDesktop, isServerMode } from '@/const/version';
 import {
   AgentRuntime,
   AgentRuntimeError,
@@ -133,7 +133,7 @@ interface CreateAssistantMessageStream extends FetchSSEOptions {
  *
  * **Note**: if you try to fetch directly, use `fetchOnClient` instead.
  */
-export function initializeWithClientStore(provider: string, payload: any) {
+export function initializeWithClientStore(provider: string, payload?: any) {
   /**
    * Since #5267, we map parameters for client-fetch in function `getProviderAuthPayload`
    * which called by `createPayloadWithKeyVaults` below.
@@ -365,10 +365,7 @@ class ChatService {
       smoothing:
         providerConfig?.settings?.smoothing ||
         // @deprecated in V2
-        providerConfig?.smoothing ||
-        // use smoothing when enable client fetch
-        // https://github.com/lobehub/lobe-chat/issues/3800
-        enableFetchOnClient,
+        providerConfig?.smoothing,
     });
   };
 
@@ -438,6 +435,8 @@ class ChatService {
         provider: params.provider!,
       });
 
+      // remove plugins
+      delete params.plugins;
       await this.getChatCompletion(
         { ...params, messages: oaiMessages, tools },
         {
@@ -474,14 +473,16 @@ class ChatService {
     // handle content type for vision model
     // for the models with visual ability, add image url to content
     // refs: https://platform.openai.com/docs/guides/vision/quick-start
-    const getContent = (m: ChatMessage) => {
+    const getUserContent = (m: ChatMessage) => {
       // only if message doesn't have images and files, then return the plain content
       if ((!m.imageList || m.imageList.length === 0) && (!m.fileList || m.fileList.length === 0))
         return m.content;
 
       const imageList = m.imageList || [];
 
-      const filesContext = isServerMode ? filesPrompts({ fileList: m.fileList, imageList }) : '';
+      const filesContext = isServerMode
+        ? filesPrompts({ addUrl: !isDesktop, fileList: m.fileList, imageList })
+        : '';
       return [
         { text: (m.content + '\n\n' + filesContext).trim(), type: 'text' },
         ...imageList.map(
@@ -490,27 +491,43 @@ class ChatService {
       ] as UserMessageContentPart[];
     };
 
+    const getAssistantContent = (m: ChatMessage) => {
+      // signature is a signal of anthropic thinking mode
+      const shouldIncludeThinking = m.reasoning && !!m.reasoning?.signature;
+
+      if (shouldIncludeThinking) {
+        return [
+          {
+            signature: m.reasoning!.signature,
+            thinking: m.reasoning!.content,
+            type: 'thinking',
+          },
+          { text: m.content, type: 'text' },
+        ] as UserMessageContentPart[];
+      }
+      // only if message doesn't have images and files, then return the plain content
+
+      if (m.imageList && m.imageList.length > 0) {
+        return [
+          !!m.content ? { text: m.content, type: 'text' } : undefined,
+          ...m.imageList.map(
+            (i) => ({ image_url: { detail: 'auto', url: i.url }, type: 'image_url' }) as const,
+          ),
+        ].filter(Boolean) as UserMessageContentPart[];
+      }
+
+      return m.content;
+    };
+
     let postMessages = messages.map((m): OpenAIChatMessage => {
       const supportTools = isCanUseFC(model, provider);
       switch (m.role) {
         case 'user': {
-          return { content: getContent(m), role: m.role };
+          return { content: getUserContent(m), role: m.role };
         }
 
         case 'assistant': {
-          // signature is a signal of anthropic thinking mode
-          const shouldIncludeThinking = m.reasoning && !!m.reasoning?.signature;
-
-          const content = shouldIncludeThinking
-            ? [
-                {
-                  signature: m.reasoning!.signature,
-                  thinking: m.reasoning!.content,
-                  type: 'thinking',
-                } as any,
-                { text: m.content, type: 'text' },
-              ]
-            : m.content;
+          const content = getAssistantContent(m);
 
           if (!supportTools) {
             return { content, role: m.role };
