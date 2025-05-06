@@ -1,5 +1,5 @@
-import { Icon, Tooltip } from '@lobehub/ui';
-import { Button, Checkbox, Input, Radio, Select, Space, Typography } from 'antd';
+import { Button, Input, Select, Tooltip } from '@lobehub/ui';
+import { Checkbox, Radio, Space, Typography } from 'antd';
 import { SearchIcon } from 'lucide-react';
 import { ReactNode, memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -45,28 +45,21 @@ const SearchBar = memo<SearchBarProps>(
     const [engines, setEngines] = useState(defaultEngines);
     const [time_range, setTimeRange] = useState(defaultTimeRange);
     const isMobile = useIsMobile();
-    const [reSearchWithSearXNG] = useChatStore((s) => [s.reSearchWithSearXNG]);
+    const [reSearchWithSearXNG] = useChatStore((s) => [s.triggerSearchAgain]);
 
     const updateAndSearch = async () => {
       const data: SearchQuery = {
-        optionalParams: {
-          searchCategories: categories,
-          searchEngines: engines,
-          searchTimeRange: time_range,
-        },
         query,
+        searchCategories: categories,
+        searchEngines: engines,
+        searchTimeRange: time_range,
       };
       onSearch?.(data);
       await reSearchWithSearXNG(messageId, data, { aiSummary });
     };
 
     const searchButton = (
-      <Button
-        icon={<Icon icon={SearchIcon} />}
-        loading={loading}
-        onClick={updateAndSearch}
-        type={'primary'}
-      >
+      <Button icon={SearchIcon} loading={loading} onClick={updateAndSearch} type={'primary'}>
         {isMobile ? undefined : t('search.searchBar.button')}
       </Button>
     );

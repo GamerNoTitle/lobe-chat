@@ -1,4 +1,5 @@
-import { ModelTokensUsage } from '@/types/message';
+import { ModelSpeed, ModelTokensUsage } from '@/types/message';
+import { safeParseJSON } from '@/utils/safeParseJSON';
 
 import { AgentRuntimeErrorType } from '../../error';
 import { parseToolCalls } from '../../helpers';
@@ -51,6 +52,8 @@ export interface StreamProtocolChunk {
     | 'error'
     // token usage
     | 'usage'
+    // performance monitor
+    | 'speed'
     // unknown data result
     | 'data';
 }
@@ -184,10 +187,7 @@ export function createCallbacksTransformer(cb: ChatStreamCallbacks | undefined) 
       else if (chunk.startsWith('data:')) {
         const content = chunk.split('data:')[1].trim();
 
-        let data: any = undefined;
-        try {
-          data = JSON.parse(content);
-        } catch {}
+        const data = safeParseJSON(content) as any;
 
         if (!data) return;
 
@@ -289,3 +289,46 @@ export const createSSEDataExtractor = () =>
       }
     },
   });
+
+export const TOKEN_SPEED_CHUNK_ID = 'output_speed';
+
+/**
+ * Create a middleware to calculate the token generate speed
+ * @requires createSSEProtocolTransformer
+ */
+export const createTokenSpeedCalculator = (
+  transformer: (chunk: any, stack: StreamContext) => StreamProtocolChunk | StreamProtocolChunk[],
+  { streamStack, inputStartAt }: { inputStartAt?: number; streamStack?: StreamContext } = {},
+) => {
+  let outputStartAt: number | undefined;
+
+  const process = (chunk: StreamProtocolChunk) => {
+    let result = [chunk];
+    // if the chunk is the first text chunk, set as output start
+    if (!outputStartAt && chunk.type === 'text') outputStartAt = Date.now();
+    // if the chunk is the stop chunk, set as output finish
+    if (inputStartAt && outputStartAt && chunk.type === 'usage') {
+      const outputTokens = chunk.data?.totalOutputTokens || chunk.data?.outputTextTokens;
+      result.push({
+        data: {
+          tps: (outputTokens / (Date.now() - outputStartAt)) * 1000,
+          ttft: outputStartAt - inputStartAt,
+        } as ModelSpeed,
+        id: TOKEN_SPEED_CHUNK_ID,
+        type: 'speed',
+      });
+    }
+    return result;
+  };
+
+  return new TransformStream({
+    transform(chunk, controller) {
+      let result = transformer(chunk, streamStack || { id: '' });
+      if (!Array.isArray(result)) result = [result];
+      result.forEach((r) => {
+        const processed = process(r);
+        if (processed) processed.forEach((p) => controller.enqueue(p));
+      });
+    },
+  });
+};

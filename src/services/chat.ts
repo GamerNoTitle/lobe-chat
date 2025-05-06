@@ -180,6 +180,7 @@ class ChatService {
     )(getAiInfraStoreState());
 
     const useModelSearch = isModelHasBuiltinSearch && chatConfig.useModelBuiltinSearch;
+
     const useApplicationBuiltinSearchTool = enabledSearch && !useModelSearch;
 
     const pluginIds = [...(enabledPlugins || [])];
@@ -286,7 +287,6 @@ class ChatService {
     const providersWithDeploymentName = [
       ModelProvider.Azure,
       ModelProvider.Volcengine,
-      ModelProvider.Doubao,
       ModelProvider.AzureAI,
     ] as string[];
 
